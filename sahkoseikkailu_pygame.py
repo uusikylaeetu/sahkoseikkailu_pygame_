@@ -1830,7 +1830,3 @@ def main():
 
 
 if __name__=="__main__": main()
-mkdir -p .github/workflows
-# Kopioi build.yml tähän kansioon
-git commit -m "Lisää GitHub Actions build"
-git push
