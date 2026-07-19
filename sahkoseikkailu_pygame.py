@@ -23,6 +23,17 @@ if "--self-test" in os.sys.argv:
 
 import pygame
 
+
+def get_save_path():
+    """Palauta käyttöjärjestelmän oma kirjoitettava tallennuspaikka."""
+    if sys.platform == "darwin":
+        directory = Path.home() / "Library" / "Application Support" / "Sahkoseikkailu"
+    elif os.name == "nt":
+        directory = Path(os.environ.get("APPDATA", Path.home())) / "Sahkoseikkailu"
+    else:
+        directory = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "Sahkoseikkailu"
+    return directory / "sahkoseikkailu_save.json"
+
 # Tehtävämoottori on samassa tiedostossa kuin vanha Tkinter-käyttöliittymä.
 # Pygame-ympäristö ei tarvitse Tkinteriä, joten tarjoamme tuontia varten vain
 # kevyet nimipaikat, jos tämän Pythonin mukana ei tullut _tkinter-moduulia.
@@ -520,7 +531,7 @@ class ElectricityGame:
         self.reset_dialog_visible=False
         self.save_confirmation_visible=False
         self.quit_dialog_visible=False
-        self.save_path=Path(__file__).with_name("sahkoseikkailu_save.json")
+        self.save_path=get_save_path()
         self.phase=0.0
         self.electrons=[i/12 for i in range(12)]
         self.branch_flow=0.0
@@ -808,6 +819,7 @@ class ElectricityGame:
             "task_number":self.task_number,
         }
         try:
+            self.save_path.parent.mkdir(parents=True, exist_ok=True)
             temporary_path=self.save_path.with_suffix(".tmp")
             temporary_path.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
             temporary_path.replace(self.save_path)
