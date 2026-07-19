@@ -35,20 +35,9 @@ def get_save_path():
     return directory / "sahkoseikkailu_save.json"
 
 # Tehtävämoottori on samassa tiedostossa kuin vanha Tkinter-käyttöliittymä.
-# Pygame-ympäristö ei tarvitse Tkinteriä, joten tarjoamme tuontia varten vain
-# kevyet nimipaikat, jos tämän Pythonin mukana ei tullut _tkinter-moduulia.
-try:
-    import elektroniikka as legacy
-except ModuleNotFoundError as error:
-    if error.name != "_tkinter":
-        raise
-    tkinter_stub = types.ModuleType("tkinter")
-    tkinter_stub.TclError = RuntimeError
-    messagebox_stub = types.ModuleType("tkinter.messagebox")
-    tkinter_stub.messagebox = messagebox_stub
-    sys.modules["tkinter"] = tkinter_stub
-    sys.modules["tkinter.messagebox"] = messagebox_stub
-    import elektroniikka as legacy
+# Pygame-ympäristö ei tarvitse Tkinteriä. elektroniikka.py hoitaa Tkinter-
+# yhteensopivuuden itse, joten tässä riittää suoraviivainen tuonti.
+import elektroniikka as legacy
 
 
 WIDTH, HEIGHT = 1240, 760
