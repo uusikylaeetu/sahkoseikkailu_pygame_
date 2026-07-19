@@ -29,6 +29,7 @@ jobs:
           pyinstaller
           --noconfirm
           --clean
+          --hidden-import=elektroniikka
           --onefile
           --windowed
           --name Sahkoseikkailu
@@ -66,6 +67,7 @@ jobs:
           pyinstaller
           --noconfirm
           --clean
+          --hidden-import=elektroniikka
           --onefile
           --windowed
           --name Sahkoseikkailu
@@ -104,6 +106,7 @@ jobs:
           pyinstaller
           --noconfirm
           --clean
+          --hidden-import=elektroniikka
           --windowed
           --name Sahkoseikkailu
           sahkoseikkailu_pygame.py
@@ -148,6 +151,7 @@ jobs:
           pyinstaller
           --noconfirm
           --clean
+          --hidden-import=elektroniikka
           --windowed
           --name Sahkoseikkailu
           sahkoseikkailu_pygame.py
