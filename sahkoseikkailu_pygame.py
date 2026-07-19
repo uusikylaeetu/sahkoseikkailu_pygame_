@@ -492,6 +492,20 @@ def fmt(value):
     return f"{value:g}" if isinstance(value, (int,float)) else str(value)
 
 
+def get_save_path() -> Path:
+    """Palauttaa käyttöjärjestelmälle sopivan käyttäjäkohtaisen tallennuspolun."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+    save_dir = base / "Sahkoseikkailu"
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    return save_dir / "sahkoseikkailu_save.json"
+
 class ElectricityGame:
     def __init__(self, screen):
         self.screen=screen
@@ -521,7 +535,8 @@ class ElectricityGame:
         self.reset_dialog_visible=False
         self.save_confirmation_visible=False
         self.quit_dialog_visible=False
-        self.save_path=Path(__file__).with_name("sahkoseikkailu_save.json")
+        self.save_path = get_save_path()
+        
         self.phase=0.0
         self.electrons=[i/12 for i in range(12)]
         self.branch_flow=0.0
