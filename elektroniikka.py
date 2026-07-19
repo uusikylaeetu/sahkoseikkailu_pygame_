@@ -2912,7 +2912,6 @@ class ElectricityGame:
         # Lähteen plusnapa on alhaalla mallikuvan mukaisesti. Käytetään samaa
         # standardoitua paristosymbolia kuin pelin muissa tasajännitetehtävissä.
         self.draw_vertical_voltage_source(source_x, 335, positive_top=False)
-cd 
         for index, x in enumerate(branch_x, 1):
             self.canvas.create_text(x-28, 325, anchor="e", text=f"R{index}",
                                     fill=YELLOW, font=("Arial", 10, "bold"),

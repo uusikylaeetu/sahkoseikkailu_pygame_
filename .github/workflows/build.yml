@@ -1,170 +1,286 @@
 name: Build and Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  APP_NAME: Sahkoseikkailu
+  MAIN_SCRIPT: sahkoseikkailu_pygame.py
+  PYTHON_VERSION: "3.12"
 
 jobs:
-
-  # ── macOS (Intel x86_64) ──────────────────────────────────────────────────
   build-macos-intel:
-    runs-on: macos-13          # last Intel runner on GitHub Actions
-    steps:
-      - uses: actions/checkout@v4
+    name: macOS Intel
+    runs-on: macos-15-intel
+    timeout-minutes: 30
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Hae lähdekoodi
+        uses: actions/checkout@v4
+
+      - name: Asenna Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Asenna riippuvuudet
-        run: pip install pygame pyinstaller
-
-      - name: Rakenna macOS Intel -versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --add-data=elektroniikka.py:.
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
-
-      - name: Pakkaa .app DMG-levykuvaksi
         run: |
-          hdiutil create -volname Sahkoseikkailu \
-            -srcfolder dist/Sahkoseikkailu.app \
-            -ov -format UDZO \
-            Sahkoseikkailu-macOS-Intel.dmg
+          python -m pip install --upgrade pip
+          python -m pip install pygame pyinstaller
 
-      - uses: actions/upload-artifact@v4
+      - name: Tarkista lähdekoodi
+        run: |
+          python -m py_compile "$MAIN_SCRIPT" elektroniikka.py
+          SDL_VIDEODRIVER=dummy python "$MAIN_SCRIPT" --self-test
+
+      - name: Rakenna macOS Intel -sovellus
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --hidden-import=elektroniikka \
+            --name "$APP_NAME" \
+            "$MAIN_SCRIPT"
+
+      - name: Testaa valmis sovellus
+        run: |
+          SDL_VIDEODRIVER=dummy "dist/$APP_NAME.app/Contents/MacOS/$APP_NAME" --self-test
+
+      - name: Pakkaa DMG-levykuvaksi
+        run: |
+          hdiutil create \
+            -volname "$APP_NAME" \
+            -srcfolder "dist/$APP_NAME.app" \
+            -ov \
+            -format UDZO \
+            "$APP_NAME-macOS-Intel.dmg"
+
+      - name: Tallenna artefakti
+        uses: actions/upload-artifact@v4
         with:
           name: macos-intel
-          path: Sahkoseikkailu-macOS-Intel.dmg
+          path: ${{ env.APP_NAME }}-macOS-Intel.dmg
+          if-no-files-found: error
+          retention-days: 14
 
-  # ── macOS (Apple Silicon arm64) ───────────────────────────────────────────
   build-macos-arm:
-    runs-on: macos-14          # M1/M2 runner
-    steps:
-      - uses: actions/checkout@v4
+    name: macOS Apple Silicon
+    runs-on: macos-15
+    timeout-minutes: 30
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Hae lähdekoodi
+        uses: actions/checkout@v4
+
+      - name: Asenna Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Asenna riippuvuudet
-        run: pip install pygame pyinstaller
-
-      - name: Rakenna macOS Apple Silicon -versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --add-data=elektroniikka.py:.
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
-
-      - name: Pakkaa .app DMG-levykuvaksi
         run: |
-          hdiutil create -volname Sahkoseikkailu \
-            -srcfolder dist/Sahkoseikkailu.app \
-            -ov -format UDZO \
-            Sahkoseikkailu-macOS-AppleSilicon.dmg
+          python -m pip install --upgrade pip
+          python -m pip install pygame pyinstaller
 
-      - uses: actions/upload-artifact@v4
+      - name: Tarkista lähdekoodi
+        run: |
+          python -m py_compile "$MAIN_SCRIPT" elektroniikka.py
+          SDL_VIDEODRIVER=dummy python "$MAIN_SCRIPT" --self-test
+
+      - name: Rakenna macOS Apple Silicon -sovellus
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --hidden-import=elektroniikka \
+            --name "$APP_NAME" \
+            "$MAIN_SCRIPT"
+
+      - name: Testaa valmis sovellus
+        run: |
+          SDL_VIDEODRIVER=dummy "dist/$APP_NAME.app/Contents/MacOS/$APP_NAME" --self-test
+
+      - name: Pakkaa DMG-levykuvaksi
+        run: |
+          hdiutil create \
+            -volname "$APP_NAME" \
+            -srcfolder "dist/$APP_NAME.app" \
+            -ov \
+            -format UDZO \
+            "$APP_NAME-macOS-AppleSilicon.dmg"
+
+      - name: Tallenna artefakti
+        uses: actions/upload-artifact@v4
         with:
           name: macos-arm
-          path: Sahkoseikkailu-macOS-AppleSilicon.dmg
+          path: ${{ env.APP_NAME }}-macOS-AppleSilicon.dmg
+          if-no-files-found: error
+          retention-days: 14
 
-  # ── Windows ───────────────────────────────────────────────────────────────
   build-windows:
+    name: Windows
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 30
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Hae lähdekoodi
+        uses: actions/checkout@v4
+
+      - name: Asenna Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Asenna riippuvuudet
-        run: pip install pygame pyinstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame pyinstaller
 
-      - name: Rakenna Windows-versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --add-data="elektroniikka.py:."
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
+      - name: Tarkista lähdekoodi
+        shell: pwsh
+        run: |
+          python -m py_compile $env:MAIN_SCRIPT elektroniikka.py
+          $env:SDL_VIDEODRIVER = "dummy"
+          python $env:MAIN_SCRIPT --self-test
+
+      - name: Rakenna Windows-sovellus
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --windowed `
+            --hidden-import=elektroniikka `
+            --name $env:APP_NAME `
+            $env:MAIN_SCRIPT
+
+      - name: Testaa valmis sovellus
+        shell: pwsh
+        run: |
+          $env:SDL_VIDEODRIVER = "dummy"
+          & "dist\$env:APP_NAME\$env:APP_NAME.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Pakkaa ZIP-arkistoksi
-        run: Compress-Archive -Path dist\Sahkoseikkailu -DestinationPath Sahkoseikkailu-Windows.zip
         shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\$env:APP_NAME" -DestinationPath "$env:APP_NAME-Windows.zip"
 
-      - uses: actions/upload-artifact@v4
+      - name: Tallenna artefakti
+        uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: Sahkoseikkailu-Windows.zip
+          path: ${{ env.APP_NAME }}-Windows.zip
+          if-no-files-found: error
+          retention-days: 14
 
-  # ── Linux ─────────────────────────────────────────────────────────────────
   build-linux:
-    runs-on: ubuntu-latest
+    name: Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Hae lähdekoodi
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Asenna Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Asenna SDL2-kirjastot ja Python-riippuvuudet
+      - name: Asenna järjestelmäriippuvuudet
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
-          pip install pygame pyinstaller
+          sudo apt-get install -y --no-install-recommends \
+            libsdl2-2.0-0 \
+            libsdl2-image-2.0-0 \
+            libsdl2-mixer-2.0-0 \
+            libsdl2-ttf-2.0-0 \
+            zip
 
-      - name: Rakenna Linux-versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --add-data=elektroniikka.py:.
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
+      - name: Asenna Python-riippuvuudet
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame pyinstaller
+
+      - name: Tarkista lähdekoodi
+        run: |
+          python -m py_compile "$MAIN_SCRIPT" elektroniikka.py
+          SDL_VIDEODRIVER=dummy python "$MAIN_SCRIPT" --self-test
+
+      - name: Rakenna Linux-sovellus
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --hidden-import=elektroniikka \
+            --name "$APP_NAME" \
+            "$MAIN_SCRIPT"
+
+      - name: Testaa valmis sovellus
+        run: |
+          SDL_VIDEODRIVER=dummy "dist/$APP_NAME/$APP_NAME" --self-test
 
       - name: Pakkaa ZIP-arkistoksi
-        run: zip -r Sahkoseikkailu-Linux.zip dist/Sahkoseikkailu
+        run: |
+          cd dist
+          zip -r "../$APP_NAME-Linux.zip" "$APP_NAME"
 
-      - uses: actions/upload-artifact@v4
+      - name: Tallenna artefakti
+        uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: Sahkoseikkailu-Linux.zip
+          path: ${{ env.APP_NAME }}-Linux.zip
+          if-no-files-found: error
+          retention-days: 14
 
-  # ── GitHub Release ────────────────────────────────────────────────────────
   release:
-    needs: [build-macos-intel, build-macos-arm, build-windows, build-linux]
-    runs-on: ubuntu-latest
+    name: Julkaise GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-macos-intel
+      - build-macos-arm
+      - build-windows
+      - build-linux
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Lataa rakennetut artefaktit
+        uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: artifacts
+
+      - name: Luo SHA-256-tarkistussummat
+        run: |
+          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' \) -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Julkaise GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             artifacts/macos-intel/Sahkoseikkailu-macOS-Intel.dmg
             artifacts/macos-arm/Sahkoseikkailu-macOS-AppleSilicon.dmg
             artifacts/windows/Sahkoseikkailu-Windows.zip
             artifacts/linux/Sahkoseikkailu-Linux.zip
-          generate_release_notes: true
+            SHA256SUMS.txt
