@@ -101,7 +101,7 @@ jobs:
           --noconfirm
           --clean
           --hidden-import=elektroniikka
-          --add-data=elektroniikka.py;.
+          --add-data="elektroniikka.py:."
           --windowed
           --name Sahkoseikkailu
           sahkoseikkailu_pygame.py
