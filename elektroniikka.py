@@ -2,10 +2,40 @@ import json
 import math
 import random
 import copy
-import tkinter as tk
+import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import messagebox
+
+# Tkinter ei ole saatavilla kaikissa ympäristöissä (esim. PyInstaller-paketit
+# Macilla). Luodaan kevyet nimiavaruudet, jotta moduuli latautuu normaalisti
+# myös ilman _tkinter-tukea.
+try:
+    import tkinter as tk
+    from tkinter import messagebox
+except (ImportError, ModuleNotFoundError):
+    tk = types.ModuleType("tkinter")
+    tk.TclError = RuntimeError
+    tk.Canvas = object
+    tk.Frame = object
+    tk.Label = object
+    tk.Button = object
+    tk.Entry = object
+    tk.StringVar = object
+    tk.IntVar = object
+    tk.BooleanVar = object
+    tk.Tk = object
+    tk.Toplevel = object
+    tk.PhotoImage = object
+    tk.font = types.ModuleType("tkinter.font")
+    messagebox = types.ModuleType("tkinter.messagebox")
+    messagebox.showinfo = lambda *a, **k: None
+    messagebox.showerror = lambda *a, **k: None
+    messagebox.showwarning = lambda *a, **k: None
+    messagebox.askyesno = lambda *a, **k: False
+    tk.messagebox = messagebox
+    sys.modules["tkinter"] = tk
+    sys.modules["tkinter.messagebox"] = messagebox
 
 
 WIDTH, HEIGHT = 1000, 680
