@@ -1,28 +1,99 @@
-name: Build Sahkoseikkailu
+name: Build and Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  windows:
-    name: Windows
-    runs-on: windows-latest
 
+  # ── macOS (Intel x86_64) ──────────────────────────────────────────────────
+  build-macos-intel:
+    runs-on: macos-13          # last Intel runner on GitHub Actions
     steps:
-      - name: Lataa lähdekoodi
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Asenna Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Asenna rakennustyökalut
-        run: python -m pip install --upgrade pip pyinstaller pygame
+      - name: Asenna riippuvuudet
+        run: pip install pygame pyinstaller
+
+      - name: Rakenna macOS Intel -versio
+        run: >
+          pyinstaller
+          --noconfirm
+          --clean
+          --hidden-import=elektroniikka
+          --add-data=elektroniikka.py:.
+          --windowed
+          --name Sahkoseikkailu
+          sahkoseikkailu_pygame.py
+
+      - name: Pakkaa .app DMG-levykuvaksi
+        run: |
+          hdiutil create -volname Sahkoseikkailu \
+            -srcfolder dist/Sahkoseikkailu.app \
+            -ov -format UDZO \
+            Sahkoseikkailu-macOS-Intel.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel
+          path: Sahkoseikkailu-macOS-Intel.dmg
+
+  # ── macOS (Apple Silicon arm64) ───────────────────────────────────────────
+  build-macos-arm:
+    runs-on: macos-14          # M1/M2 runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Asenna riippuvuudet
+        run: pip install pygame pyinstaller
+
+      - name: Rakenna macOS Apple Silicon -versio
+        run: >
+          pyinstaller
+          --noconfirm
+          --clean
+          --hidden-import=elektroniikka
+          --add-data=elektroniikka.py:.
+          --windowed
+          --name Sahkoseikkailu
+          sahkoseikkailu_pygame.py
+
+      - name: Pakkaa .app DMG-levykuvaksi
+        run: |
+          hdiutil create -volname Sahkoseikkailu \
+            -srcfolder dist/Sahkoseikkailu.app \
+            -ov -format UDZO \
+            Sahkoseikkailu-macOS-AppleSilicon.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm
+          path: Sahkoseikkailu-macOS-AppleSilicon.dmg
+
+  # ── Windows ───────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Asenna riippuvuudet
+        run: pip install pygame pyinstaller
 
       - name: Rakenna Windows-versio
         run: >
@@ -30,37 +101,35 @@ jobs:
           --noconfirm
           --clean
           --hidden-import=elektroniikka
-          --onefile
+          --add-data=elektroniikka.py;.
           --windowed
           --name Sahkoseikkailu
           sahkoseikkailu_pygame.py
 
-      - name: Nimeä Windows-versio
+      - name: Pakkaa ZIP-arkistoksi
+        run: Compress-Archive -Path dist\Sahkoseikkailu -DestinationPath Sahkoseikkailu-Windows.zip
         shell: pwsh
-        run: Copy-Item "dist/Sahkoseikkailu.exe" "Sahkoseikkailu-Windows.exe"
 
-      - name: Tallenna Windows-versio
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: Sahkoseikkailu-Windows.exe
-          if-no-files-found: error
+          path: Sahkoseikkailu-Windows.zip
 
-  linux:
-    name: Linux
-    runs-on: ubuntu-22.04
-
+  # ── Linux ─────────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
-      - name: Lataa lähdekoodi
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Asenna Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Asenna rakennustyökalut
-        run: python -m pip install --upgrade pip pyinstaller pygame
+      - name: Asenna SDL2-kirjastot ja Python-riippuvuudet
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+          pip install pygame pyinstaller
 
       - name: Rakenna Linux-versio
         run: >
@@ -68,135 +137,34 @@ jobs:
           --noconfirm
           --clean
           --hidden-import=elektroniikka
-          --onefile
+          --add-data=elektroniikka.py:.
           --windowed
           --name Sahkoseikkailu
           sahkoseikkailu_pygame.py
 
-      - name: Pakkaa Linux-versio
-        run: |
-          chmod +x dist/Sahkoseikkailu
-          tar -C dist -czf Sahkoseikkailu-Linux-x64.tar.gz Sahkoseikkailu
+      - name: Pakkaa ZIP-arkistoksi
+        run: zip -r Sahkoseikkailu-Linux.zip dist/Sahkoseikkailu
 
-      - name: Tallenna Linux-versio
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: Sahkoseikkailu-Linux-x64.tar.gz
-          if-no-files-found: error
+          path: Sahkoseikkailu-Linux.zip
 
-  macos-apple:
-    name: macOS Apple Silicon
-    runs-on: macos-15
-
-    steps:
-      - name: Lataa lähdekoodi
-        uses: actions/checkout@v4
-
-      - name: Asenna Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Asenna rakennustyökalut
-        run: python -m pip install --upgrade pip pyinstaller pygame
-
-      - name: Rakenna macOS-versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
-
-      - name: Tee Apple Silicon DMG
-        run: |
-          mkdir dmg-root
-          cp -R dist/Sahkoseikkailu.app dmg-root/
-          ln -s /Applications dmg-root/Applications
-          hdiutil create \
-            -volname "Sahkoseikkailu" \
-            -srcfolder dmg-root \
-            -ov \
-            -format UDZO \
-            Sahkoseikkailu-macOS-Apple-Silicon.dmg
-
-      - name: Tallenna Apple Silicon -versio
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-apple
-          path: Sahkoseikkailu-macOS-Apple-Silicon.dmg
-          if-no-files-found: error
-
-  macos-intel:
-    name: macOS Intel
-    runs-on: macos-15-intel
-
-    steps:
-      - name: Lataa lähdekoodi
-        uses: actions/checkout@v4
-
-      - name: Asenna Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Asenna rakennustyökalut
-        run: python -m pip install --upgrade pip pyinstaller pygame
-
-      - name: Rakenna macOS-versio
-        run: >
-          pyinstaller
-          --noconfirm
-          --clean
-          --hidden-import=elektroniikka
-          --windowed
-          --name Sahkoseikkailu
-          sahkoseikkailu_pygame.py
-
-      - name: Tee Intel DMG
-        run: |
-          mkdir dmg-root
-          cp -R dist/Sahkoseikkailu.app dmg-root/
-          ln -s /Applications dmg-root/Applications
-          hdiutil create \
-            -volname "Sahkoseikkailu" \
-            -srcfolder dmg-root \
-            -ov \
-            -format UDZO \
-            Sahkoseikkailu-macOS-Intel.dmg
-
-      - name: Tallenna Intel-versio
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel
-          path: Sahkoseikkailu-macOS-Intel.dmg
-          if-no-files-found: error
-
+  # ── GitHub Release ────────────────────────────────────────────────────────
   release:
-    name: Liitä ohjelmat julkaisuun
-    needs:
-      - windows
-      - linux
-      - macos-apple
-      - macos-intel
-
+    needs: [build-macos-intel, build-macos-arm, build-windows, build-linux]
     runs-on: ubuntu-latest
-
     steps:
-      - name: Lataa rakennetut ohjelmat
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: release-files
-          merge-multiple: true
+          path: artifacts/
 
-      - name: Liitä ohjelmat GitHub Releaseen
+      - name: Julkaise GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-files/Sahkoseikkailu-Windows.exe
-            release-files/Sahkoseikkailu-Linux-x64.tar.gz
-            release-files/Sahkoseikkailu-macOS-Apple-Silicon.dmg
-            release-files/Sahkoseikkailu-macOS-Intel.dmg
+            artifacts/macos-intel/Sahkoseikkailu-macOS-Intel.dmg
+            artifacts/macos-arm/Sahkoseikkailu-macOS-AppleSilicon.dmg
+            artifacts/windows/Sahkoseikkailu-Windows.zip
+            artifacts/linux/Sahkoseikkailu-Linux.zip
+          generate_release_notes: true
