@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 import os
+import tempfile
 import random
 import re
 import sys
@@ -1777,7 +1778,10 @@ def run_self_test():
     game.update(0)
     assert game.task_number==4
     assert game.task_menu_button.label=="TEHTÄVÄ 4  ▼"
-    game.save_path=Path("/tmp")/f"sahkoseikkailu-self-test-{os.getpid()}.json"
+    game.save_path = (
+        Path(tempfile.gettempdir())
+        / f"sahkoseikkailu-self-test-{os.getpid()}.json"
+    )
     game.score=23
     game.highest_score=80
     game.unlocked_through=20
