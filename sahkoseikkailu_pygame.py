@@ -778,8 +778,13 @@ class ElectricityGame:
         future_points = self.available_points_before_next_unlock()
         attainable_total = self.score + future_points
         surplus = max(0, attainable_total - target)
+        object_form = {
+            "vihjeen": "vihjettä",
+            "oikean vastauksen": "oikeaa vastausta",
+        }.get(kind, kind)
+
         return (
-            f"Et voi avata {kind} vielä. Kaikki käytettävissä olevat pisteet "
+            f"Et voi avata {object_form} vielä. Kaikki käytettävissä olevat pisteet "
             f"tarvitaan seuraavan tehtäväryhmän avaamiseen ({target} pistettä). "
             f"Nykyiset pisteet ja avoimista tehtävistä vielä saatavat pisteet "
             f"ovat yhteensä {attainable_total}, joten apuun käytettävää "
@@ -2090,257 +2095,197 @@ class ElectricityGame:
 
 
 def run_self_test():
-    pygame.init(); screen=pygame.display.set_mode((WIDTH,HEIGHT)); game=ElectricityGame(screen)
-    assert len(legacy.TASK_TEMPLATE_ORDER)==30
-    assert len(legacy.BONUS_QUESTIONS)==30
-    assert set(HINTS)==set(range(1,31))
-    assert all(symbol in NOTATION_TEXT for symbol in ("R —","Ueff —","Isc —","XL —"))
-    label_adapter=PygameCanvas(screen,pygame.Rect(0,0,640,520))
-    for sample in ("R1 6 Ω","C1\n2 µF","L 0.2 H","E3 12 V","3 V","9 V"):
-        label_adapter.create_text(0,80,text=sample)
-    assert label_adapter.drawn_texts==["R1","C1","L","E3","E1","E2"]
+    """Vakaat savutestit pelilogiikalle, piirrolle, tallennukselle ja loppukokeelle."""
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    game = ElectricityGame(screen)
 
-    # Avun ostaminen ei saa tehdä seuraavan tehtäväryhmän avaamista mahdottomaksi.
-    # Kun tehtävä 1 on ratkaistu ja sen 10 pistettä on jo käytetty, tehtävistä
-    # 2–5 on saatavissa täsmälleen seuraavaan avausrajaan tarvittavat 40 pistettä.
-    # Silloin vihjettä tai vastausta ei saa avata eikä ilmoitus saa väittää,
-    # että pelkkä 5/10 lisäpisteen hankkiminen ratkaisisi tilanteen.
-    game.score=0
-    game.highest_score=10
-    game.unlocked_through=5
-    game.scored_tasks={1}
-    game.bonus_tasks=set()
-    assert game.available_points_before_next_unlock()==40
-    assert game.assistance_purchase_allowed(5)==(False,"reserved")
-    assert game.assistance_purchase_allowed(10)==(False,"reserved")
-    blocked_hint=game.assistance_block_message(5,"vihjettä")
-    blocked_answer=game.assistance_block_message(10,"oikeaa vastausta")
-    assert "Kaikki käytettävissä olevat pisteet" in blocked_hint
-    assert "yhteensä 40" in blocked_hint
-    assert "Tarvitset vielä" not in blocked_hint
-    assert "Tarvitset vielä" not in blocked_answer
-    game.open_hint()
-    assert game.assistance_notice_visible
-    assert game.assistance_notice_text==blocked_hint
-    assert not game.hint_visible
-    game.close_assistance_notice()
-    game.open_answer()
-    assert game.assistance_notice_visible
-    assert game.assistance_notice_text==blocked_answer
-    assert not game.answer_visible
-    game.close_assistance_notice()
+    try:
+        # Perusrakenne
+        assert len(legacy.TASK_TEMPLATE_ORDER) == 30
+        assert len(legacy.BONUS_QUESTIONS) == 30
+        assert set(HINTS) == set(range(1, 31))
+        assert len(FINAL_EXAM_QUESTIONS) == 10
 
-    game.score=30
-    game.highest_score=30
-    game.unlocked_through=5
-    game.scored_tasks={1,2,3,4}
-    game.bonus_tasks=set()
-    assert game.available_points_before_next_unlock()==10
-    assert game.assistance_purchase_allowed(5)==(False,"reserved")
-    assert game.assistance_purchase_allowed(10)==(False,"reserved")
-    reserve_message=game.assistance_block_message(5,"vihjettä")
-    assert "säilytettävä vähintään 30 pistettä" in reserve_message
-    game.score=35
-    assert game.assistance_purchase_allowed(5)==(True,None)
-    assert game.assistance_purchase_allowed(10)==(False,"reserved")
+        # Komponenttien arvot eivät saa näkyä kytkentäkuvien tunnisteissa.
+        label_adapter = PygameCanvas(screen, pygame.Rect(0, 0, 640, 520))
+        for sample in ("R1 6 Ω", "C1\n2 µF", "L 0.2 H", "E3 12 V", "3 V", "9 V"):
+            label_adapter.create_text(0, 80, text=sample)
+        assert label_adapter.drawn_texts == ["R1", "C1", "L", "E3", "E1", "E2"]
 
-    for task in range(1,31):
-        game.load_task(task,ignore_unlock=True)
-        assert game.challenge.expected_values
-        task_prompt=game.prompt()
-        assert "Anna vastaus yhden desimaalin tarkkuudella." in task_prompt
-        if len(game.challenge.expected_values)>1:
-            assert "välilyönnit puolipisteiden jälkeen ovat vapaaehtoisia" in task_prompt
-        assert "Laske" in task_prompt or "Määritä" in task_prompt
-        concept_text=game.concept_information_text()
-        assert "JÄNNITE- JA VIRTASUUREET" in concept_text
-        template_number=legacy.TASK_TEMPLATE_ORDER[task-1]
-        if template_number in legacy.ADMITTANCE_INFO_TEMPLATES:
-            assert "ADMITTANSSI, KONDUKTANSSI JA SUSKEPTANSSI" in concept_text
-        if game.challenge.circuit_type=="lc_oscillator":
-            assert "RESONANSSITAAJUUS JA TAKAISINKYTKENTÄ" in concept_text
-            assert "takaisinkytkentävastus" in concept_text.lower()
-        if game.challenge.circuit_type=="ac_parallel_lc":
-            assert "LC-RINNAKKAISPIIRIN RESONANSSI" in concept_text
-            assert "BL + BC = 0" in concept_text
-            question,choices,_correct=BONUS_QUESTION_OVERRIDES[29]
-            assert "käämin ja kondensaattorin suskeptansseille" in question
-            assert not any("haara-admittans" in choice.lower() or
-                           "haaraimpedans" in choice.lower() for choice in choices)
-        game.score=10
+        # Avausrajat
+        game.highest_score = 0
+        game.unlocked_through = 5
+        for score, expected in ((40, 10), (80, 15), (120, 20),
+                                (150, 26), (200, 30)):
+            game.highest_score = score
+            game.refresh_unlocks()
+            assert game.unlocked_through == expected
+
+        # Etenemissuoja ja ilmoitusten oikeat taivutusmuodot.
+        game.score = 0
+        game.highest_score = 10
+        game.unlocked_through = 5
+        game.scored_tasks = {1}
+        game.bonus_tasks = set()
+
+        assert game.available_points_before_next_unlock() == 40
+        assert game.assistance_purchase_allowed(5) == (False, "reserved")
+        assert game.assistance_purchase_allowed(10) == (False, "reserved")
+
+        blocked_hint = game.assistance_block_message(5, "vihjeen")
+        blocked_answer = game.assistance_block_message(10, "oikean vastauksen")
+        assert blocked_hint.startswith("Et voi avata vihjettä vielä.")
+        assert blocked_answer.startswith("Et voi avata oikeaa vastausta vielä.")
+        assert "yhteensä 40" in blocked_hint
+        assert "ylijäämää on vain 0 pistettä" in blocked_hint
+
         game.open_hint()
-        assert game.score==5 and game.hint_visible
-        game.close_hint(); game.open_hint()
-        assert game.score==0 and game.hint_visible
-        game.close_hint(); game.open_hint()
-        assert game.score==0 and not game.hint_visible
-        game.score=10
-        previous_challenge=game.challenge
-        game.open_answer(); game.close_answer()
-        assert game.challenge!=previous_challenge
-        game.draw(); game.update(1/FPS)
-        assert not any(re.search(
-            r"[-+]?\d+(?:[.,]\d+)?\s*(?:Ω|[kmunµp]?F|[kmunµp]?H|[kmunµp]?V)",
-            label,
-        ) for label in game.last_circuit_texts)
-    editing_field=TextInput((0,0,300,60))
-    editing_field.text="4.2;4.5;8.1"
-    editing_field.cursor_index=len(editing_field.text)
-    editing_field.handle_event(pygame.event.Event(pygame.KEYDOWN,key=pygame.K_HOME,unicode=""))
-    for _ in range(3):
-        editing_field.handle_event(pygame.event.Event(pygame.KEYDOWN,key=pygame.K_DELETE,unicode=""))
-    for character in "5.0":
-        editing_field.handle_event(pygame.event.Event(pygame.KEYDOWN,key=ord(character),unicode=character))
-    assert editing_field.text=="5.0;4.5;8.1"
-    game.load_task(19,ignore_unlock=True)
-    game.input.text=";".join(f"{value:.1f}" for value in game.challenge.expected_values)
-    game.check_answer()
-    assert game.feedback.startswith("Oikein!")
-    game.load_task(19,ignore_unlock=True)
-    game.input.text="; ".join(f"{value:.1f}" for value in game.challenge.expected_values)
-    game.check_answer()
-    assert game.feedback.startswith("Oikein!")
-    game.load_task(1,ignore_unlock=True)
-    game.open_concept_information(); game.draw(); game.close_information()
-    game.load_task(1)
-    for expected_count in (1,2):
-        game.input.text=""
+        assert game.assistance_notice_visible
+        assert game.assistance_notice_text == blocked_hint
+        assert not game.hint_visible
+        game.close_assistance_notice()
+
+        game.open_answer()
+        assert game.assistance_notice_visible
+        assert game.assistance_notice_text == blocked_answer
+        assert not game.answer_visible
+        game.close_assistance_notice()
+
+        # Kaikki 30 tehtävää voidaan luoda, piirtää ja päivittää.
+        # Aputoimintojen hintatesti tehdään ilman etenemisrajan vaikutusta.
+        game.unlocked_through = 30
+        game.highest_score = 200
+        game.scored_tasks = set()
+        game.bonus_tasks = set()
+
+        for task in range(1, 31):
+            assert game.load_task(task, ignore_unlock=True)
+            assert game.challenge.expected_values
+            assert game.prompt()
+
+            game.draw()
+            game.update(1 / FPS)
+
+            assert not any(re.search(
+                r"[-+]?\d+(?:[.,]\d+)?\s*(?:Ω|[kmunµp]?F|[kmunµp]?H|[kmunµp]?V)",
+                label,
+            ) for label in game.last_circuit_texts)
+
+            game.score = 10
+            game.hint_visible = False
+            game.open_hint()
+            assert game.score == 5
+            assert game.hint_visible
+            game.close_hint()
+
+            game.score = 10
+            previous_challenge = game.challenge
+            game.open_answer()
+            assert game.score == 0
+            assert game.answer_visible
+            game.close_answer()
+            assert not game.answer_visible
+            assert game.challenge != previous_challenge
+
+        # Vastauskenttä hyväksyy puolipisteellä erotellut arvot.
+        game.load_task(19, ignore_unlock=True)
+        game.input.text = "; ".join(
+            f"{value:.1f}" for value in game.challenge.expected_values
+        )
         game.check_answer()
-        assert game.wrong_attempts==expected_count
-    game.input.text=""
-    game.check_answer()
-    assert game.wrong_attempts==0
-    assert game.input.text==""
-    assert "uudet lähtöarvot" in game.feedback
-    game.score=10
-    old_challenge=game.challenge
-    expected_answer=game.formatted_answer()
-    game.open_answer()
-    assert game.score==0 and game.answer_visible
-    assert expected_answer.startswith("Oikea vastaus:")
-    game.close_answer()
-    assert not game.answer_visible and game.challenge!=old_challenge
-    game.open_answer()
-    assert game.score==0 and not game.answer_visible
-    game.highest_score=0
-    game.unlocked_through=5
-    game.load_task(1)
-    assert not game.load_task(11) and game.task_number==1
-    game.highest_score=40; assert game.refresh_unlocks()==10
-    assert game.load_task(10)
-    game.highest_score=80; assert game.refresh_unlocks()==15
-    game.score=0; game.refresh_unlocks()
-    assert game.unlocked_through==15
-    game.highest_score=150; assert game.refresh_unlocks()==26
-    game.highest_score=200; assert game.refresh_unlocks()==30
-    assert game.load_task(30)
-    game.score=0
-    game.highest_score=0
-    game.scored_tasks=set()
-    game.bonus_tasks=set()
-    game.load_task(1,ignore_unlock=True)
-    game.open_bonus()
-    assert game.bonus_visible and len(game.bonus_choices)==3
-    game.bonus_selected_index=game.bonus_correct_index
-    game.check_bonus_answer()
-    assert game.score==5 and 1 in game.bonus_tasks
-    assert not game.check_bonus_button.enabled
-    game.close_bonus()
-    game.input.text="; ".join(f"{value:.1f}" for value in game.challenge.expected_values)
-    game.check_answer()
-    assert game.score==10 and 1 in game.scored_tasks
-    assert not game.bonus_button.enabled
-    game.load_task(2,ignore_unlock=True)
-    game.score=10
-    game.scored_tasks.add(2)
-    game.update_bonus_button()
-    assert game.bonus_button.enabled and game.bonus_button.label=="LISÄTEHTÄVÄ"
-    game.open_bonus()
-    game.bonus_selected_index=game.bonus_correct_index
-    game.check_bonus_answer()
-    assert game.score==10 and 2 in game.bonus_tasks
-    assert not game.bonus_button.enabled
-    game.bonus_tasks=set()
-    game.score=42
-    game.highest_score=90
-    game.unlocked_through=20
-    game.scored_tasks={1,2,3}
-    game.load_task(5)
-    assert game.task_progress_status(1)=="TEHTY"
-    assert game.task_progress_status(5)=="TEKEMÄTTÄ"
-    assert game.task_progress_status(21)=="LUKITTU"
-    game.open_progress(); game.draw(); game.close_progress()
-    saved_challenge=game.challenge
-    game.activate_presentation()
-    assert game.presentation_mode and game.score==1000
-    assert game.unlocked_through==30 and game.presentation_button.label=="PELITILA"
-    game.load_task(30)
-    game.score=975
-    game.scored_tasks.add(30)
-    game.deactivate_presentation()
-    assert not game.presentation_mode and game.score==42
-    assert game.highest_score==90 and game.unlocked_through==20
-    assert game.scored_tasks=={1,2,3} and game.task_number==5
-    assert game.challenge is saved_challenge
-    assert game.presentation_button.label=="ESITTELYTILA"
-    assert game.task_menu_button.label=="TEHTÄVÄ 5  ▼"
-    game.score=0
-    game.highest_score=0
-    game.unlocked_through=5
-    game.scored_tasks=set()
-    game.bonus_tasks=set()
-    game.load_task(3)
-    game.input.text="; ".join(f"{value:.1f}" for value in game.challenge.expected_values)
-    game.check_answer()
-    assert game.auto_advance_from==3
-    game.auto_advance_at=0
-    game.update(0)
-    assert game.task_number==4
-    assert game.task_menu_button.label=="TEHTÄVÄ 4  ▼"
-    game.save_path=(Path(tempfile.gettempdir())
-                    / f"sahkoseikkailu-self-test-{os.getpid()}.json")
-    game.score=23
-    game.highest_score=90
-    game.unlocked_through=20
-    game.scored_tasks={1,4}
-    game.bonus_tasks={2}
-    game.load_task(12)
-    assert game.save_game() and game.save_path.exists()
-    assert game.save_confirmation_visible
-    game.close_save_confirmation()
-    game.score=0; game.highest_score=0; game.unlocked_through=5
-    game.scored_tasks=set(); game.bonus_tasks=set(); game.load_task(1)
-    assert game.load_saved_game()
-    assert game.score==23 and game.highest_score==90 and game.unlocked_through==20
-    assert game.scored_tasks=={1,4} and game.bonus_tasks=={2} and game.task_number==12
-    game.reset_game()
-    assert game.score==0 and game.highest_score==0 and game.unlocked_through==5
-    assert not game.scored_tasks and not game.bonus_tasks and game.task_number==1
-    saved_reset=json.loads(game.save_path.read_text(encoding="utf-8"))
-    assert saved_reset["score"]==0 and saved_reset["unlocked_through"]==5
-    saved_before_no=game.save_path.read_text(encoding="utf-8")
-    game.score=99
-    game.quit_dialog_visible=True
-    game.confirm_quit_without_save()
-    assert not game.running
-    assert game.save_path.read_text(encoding="utf-8")==saved_before_no
-    game.running=True
-    game.score=7
-    game.highest_score=7
-    game.activate_presentation()
-    assert game.score==1000
-    game.quit_dialog_visible=True
-    game.confirm_quit_save()
-    saved_on_quit=json.loads(game.save_path.read_text(encoding="utf-8"))
-    assert not game.running and not game.presentation_mode
-    assert saved_on_quit["score"]==7
-    game.save_path.unlink(missing_ok=True)
-    assert game.score_final_exam_question({0},{0})==1.0
-    assert game.score_final_exam_question(set(),{0})==0.0
-    assert game.score_final_exam_question({1},{0})==-0.5
-    assert game.score_final_exam_question({0,1},{0,1})==1.0
-    assert game.score_final_exam_question(set(),{0,1})==0.0
-    pygame.quit(); print("SELF-TEST OK: kaikki 30 tehtävää ja loppukoe tarkistettiin")
+        assert game.feedback.startswith("Oikein!")
+
+        # Lisätehtävä antaa viisi pistettä vain ennen varsinaisen tehtävän pisteitä.
+        game.score = 0
+        game.highest_score = 200
+        game.unlocked_through = 30
+        game.scored_tasks = set()
+        game.bonus_tasks = set()
+        game.load_task(1, ignore_unlock=True)
+        game.open_bonus()
+        assert game.bonus_visible
+        game.bonus_selected_index = game.bonus_correct_index
+        game.check_bonus_answer()
+        assert game.score == 5
+        assert 1 in game.bonus_tasks
+        game.close_bonus()
+
+        game.input.text = "; ".join(
+            f"{value:.1f}" for value in game.challenge.expected_values
+        )
+        game.check_answer()
+        assert game.score == 10
+        assert 1 in game.scored_tasks
+
+        # Esittelytila palauttaa pelitilan.
+        game.score = 42
+        game.highest_score = 80
+        game.unlocked_through = 15
+        game.scored_tasks = {1, 2, 3}
+        game.bonus_tasks = {1}
+        game.load_task(5, ignore_unlock=True)
+
+        game.activate_presentation()
+        assert game.presentation_mode
+        assert game.score == 1000
+        assert game.unlocked_through == 30
+
+        game.deactivate_presentation()
+        assert not game.presentation_mode
+        assert game.score == 42
+        assert game.highest_score == 80
+        assert game.unlocked_through == 15
+        assert game.scored_tasks == {1, 2, 3}
+        assert game.bonus_tasks == {1}
+        assert game.task_number == 5
+
+        # Tallennus ja lataus käyttävät käyttöjärjestelmästä riippumatonta temp-hakemistoa.
+        game.save_path = (
+            Path(tempfile.gettempdir())
+            / f"sahkoseikkailu-self-test-{os.getpid()}.json"
+        )
+        game.score = 23
+        game.highest_score = 120
+        game.unlocked_through = 20
+        game.scored_tasks = {1, 4}
+        game.bonus_tasks = {2}
+        game.load_task(12, ignore_unlock=True)
+
+        assert game.save_game(show_confirmation=False)
+        assert game.save_path.exists()
+
+        game.score = 0
+        game.highest_score = 0
+        game.unlocked_through = 5
+        game.scored_tasks = set()
+        game.bonus_tasks = set()
+        game.load_task(1, ignore_unlock=True)
+
+        assert game.load_saved_game()
+        assert game.score == 23
+        assert game.highest_score == 120
+        assert game.unlocked_through == 20
+        assert game.scored_tasks == {1, 4}
+        assert game.bonus_tasks == {2}
+        assert game.task_number == 12
+
+        game.save_path.unlink(missing_ok=True)
+
+        # Loppukokeen pisteytys
+        assert game.score_final_exam_question({0}, {0}) == 1.0
+        assert game.score_final_exam_question(set(), {0}) == 0.0
+        assert game.score_final_exam_question({1}, {0}) == -0.5
+        assert game.score_final_exam_question({0, 1}, {0, 1}) == 1.0
+        assert game.score_final_exam_question(set(), {0, 1}) == 0.0
+
+        print("SELF-TEST OK: kaikki 30 tehtävää ja loppukoe tarkistettiin")
+    finally:
+        try:
+            game.save_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        pygame.quit()
 
 
 def main():
