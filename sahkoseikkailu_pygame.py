@@ -11,10 +11,10 @@ import argparse
 import json
 import math
 import os
-import tempfile
 import random
 import re
 import sys
+import tempfile
 import types
 from pathlib import Path
 from typing import Iterable
@@ -91,26 +91,40 @@ HINTS = {
 }
 
 RULES_TEXT = """PELIN TAVOITE
-Pelin läpäiseminen edellyttää, että ratkaiset kaikki 30 tehtävää.
+Ratkaise kaikki 30 tehtävää ja läpäise niiden jälkeen avautuva loppukoe.
 
 PISTEET
-- Jokaisen tehtävän ensimmäisestä oikeasta suorituksesta saa 10 pistettä.
-- Väärä vastaus ei vähennä pisteitä.
+- Tehtävistä 1–26 saa ensimmäisestä oikeasta suorituksesta 10 pistettä.
+- Jokeritehtävistä 27–30 saa ensimmäisestä oikeasta suorituksesta 20 pistettä.
+- Väärä vastaus ei vähennä pelipisteitä.
 - Kolmen väärän vastauksen jälkeen tehtävään arvotaan uudet lähtöarvot.
 - Samasta tehtävästä saa pisteet vain kerran.
 
 LISÄKYSYMYS, VIHJE JA VASTAUS
-- Ennen varsinaisen tehtävän ratkaisua lisäkysymyksen oikeasta vastauksesta saa 5 pistettä. Tällöin tavallisen tehtävän jäljelle jäävä palkkio on 5 pistettä, joten lisäkysymykseen vastaaminen ei kasvata tehtävän kokonaispalkkiota. Varsinaisen tehtävän ratkaisemisen jälkeen lisäkysymyksen voi edelleen tehdä, mutta siitä ei enää saa pisteitä.
+- Ennen varsinaisen tehtävän ratkaisua lisäkysymyksen oikeasta vastauksesta saa 5 pistettä. Tämä vähennetään varsinaisen tehtävän jäljellä olevasta palkkiosta, joten tavallisen tehtävän kokonaispalkkio on enintään 10 pistettä ja jokeritehtävän 20 pistettä.
+- Varsinaisen tehtävän ratkaisemisen jälkeen lisäkysymyksen voi edelleen tehdä, mutta siitä ei enää saa pisteitä.
 - Vihje maksaa 5 pistettä.
 - Valmiin numeroarvon näyttäminen maksaa 10 pistettä. Kun oikea vastaus suljetaan, tehtävään arvotaan uudet lähtöarvot.
 - Vihjettä tai valmista vastausta ei voi avata, jos pisteet eivät riitä.
+- Peli varaa lisäksi riittävästi pisteitä seuraavan tehtäväryhmän avaamiseen. Jos apua ei voi vielä ostaa, peli kertoo pistemäärän, joka tarvitaan vihjeen tai oikean vastauksen avaamiseen ilman etenemisen lukkiutumista.
 
 ETENEMINEN
-- Perustehtävät 1–10 ovat avoinna heti.
-- Keskivaikeat tehtävät 11–20 avautuvat 80 pisteellä.
-- Haastavat tehtävät 21–26 avautuvat 150 pisteellä.
-- Jokeritehtävät 27–30 avautuvat 200 pisteellä.
+- Tehtävät 1–5 ovat avoinna heti.
+- Tehtävät 6–10 avautuvat 40 pisteellä.
+- Tehtävät 11–15 avautuvat 90 pisteellä.
+- Tehtävät 16–20 avautuvat 130 pisteellä.
+- Tehtävät 21–26 avautuvat 170 pisteellä.
+- Jokeritehtävät 27–30 avautuvat 220 pisteellä.
+- Kun uusi tehtäväryhmä avautuu, peli näyttää siitä ilmoituksen.
 - Kerran avattu tehtäväryhmä pysyy avoinna, vaikka pisteitä käytettäisiin myöhemmin.
+
+LOPPUKOE
+- Kun kaikki 30 tehtävää on ratkaistu, LOPPUKOE-painike aktivoituu ja peli ilmoittaa kokeen olevan valmis. Koe käynnistyy vasta painikkeesta. Esittelytilassa painike on käytettävissä heti.
+- Jokaisessa kysymyksessä on neljä vaihtoehtoa. Oikeita vaihtoehtoja voi olla yksi tai useita.
+- Yhden oikean vaihtoehdon kysymyksessä täsmälleen oikea valinta antaa +1 pisteen, tyhjä vastaus 0 pistettä ja väärä vastaus −0,5 pistettä.
+- Usean oikean vaihtoehdon kysymyksessä jokainen oikein käsitelty vaihtoehto antaa +0,25 pistettä ja jokainen väärin käsitelty vaihtoehto −0,25 pistettä. Oikein käsitelty tarkoittaa, että oikea vaihtoehto valitaan tai väärä vaihtoehto jätetään valitsematta.
+- Loppukokeen kokonaispistemäärä ei voi olla alle nollan.
+- Peli läpäistään vähintään tuloksella 8/10.
 
 EDISTYMINEN näyttää ratkaistut tehtävät. TALLENNA säilyttää tilanteen ja avatut tehtävät. ALOITA ALUSTA nollaa pisteet ja suoritukset."""
 
@@ -169,6 +183,37 @@ XC — kapasitiivinen reaktanssi, yksikkö ohmi (Ω)
 XL — induktiivinen reaktanssi, yksikkö ohmi (Ω)
 
 f — taajuus, yksikkö hertsi (Hz)"""
+
+FINAL_EXAM_QUESTIONS = (
+    ("Mikä kaava kuvaa Ohmin lakia?",
+     ("U = RI", "P = UI", "Q = CU", "XL = 2πfL"), {0}),
+    ("Mitkä väitteet pätevät vastusten rinnankytkennässä?",
+     ("Kaikkien haarojen yli on sama jännite", "Kokonaisvirta on haaravirtojen summa",
+      "Kokonaisresistanssi on aina suurin vastus", "Haarojen virrat ovat aina yhtä suuret"), {0, 1}),
+    ("Miten ideaalisen käämin reaktanssi muuttuu taajuuden kasvaessa?",
+     ("Se kasvaa", "Se pienenee", "Se pysyy aina nollana", "Se muuttuu kapasitanssiksi"), {0}),
+    ("Mitkä väitteet pätevät ideaaliseen kondensaattoriin vaihtovirralla?",
+     ("XC = 1/(2πfC)", "Reaktanssi pienenee taajuuden kasvaessa",
+      "Virta johtaa jännitettä", "Reaktanssi kasvaa kapasitanssin kasvaessa"), {0, 1, 2}),
+    ("Mitä Kirchhoffin virtalaki sanoo solmusta?",
+     ("Tulevien virtojen summa on lähtevien virtojen summa", "Jännitteiden summa on aina yksi voltti",
+      "Kaikkien haarojen resistanssit ovat samat", "Solmussa ei voi olla yli kahta haaraa"), {0}),
+    ("Mitkä toimet kuuluvat Thévenin-vastuksen määrittämiseen?",
+     ("Riippumaton ideaalinen jännitelähde oikosuljetaan",
+      "Riippumaton ideaalinen virtalähde avataan",
+      "Portista katsotaan piirin sisään", "Kaikki vastukset poistetaan"), {0, 1, 2}),
+    ("Milloin ideaalinen RLC-sarjapiiri on resonanssissa?",
+     ("Kun XL = XC", "Kun R = 0 aina", "Kun taajuus on aina 50 Hz", "Kun U = I"), {0}),
+    ("Mitkä väitteet admittanssista ovat oikein?",
+     ("Y = 1/Z", "Rinnakkaisten haarojen admittanssit voidaan summata",
+      "Sen yksikkö on siemens", "Se on aina pelkkä reaaliluku"), {0, 1, 2}),
+    ("Mitkä suureet voivat olla kompleksisia vaihtovirtapiirin laskuissa?",
+     ("Impedanssi", "Admittanssi", "Reaktanssia sisältävä kokonaisvastus", "Taajuus hertseinä"), {0, 1, 2}),
+    ("Mitä tapahtuu ideaalisen LC-rinnakkaispiirin resonanssissa?",
+     ("Käämin ja kondensaattorin suskeptanssit kumoavat toisensa",
+      "Kokonaisadmittanssi lähestyy nollaa", "Impedanssi kasvaa hyvin suureksi",
+      "Lähdevirta kasvaa äärettömäksi"), {0, 1, 2}),
+)
 
 CONCEPT_SECTIONS = {
     "electrical": ("JÄNNITE- JA VIRTASUUREET", """Lähdejännite on jännitelähteen tuottama jännite. Napajännite on jännitelähteen napojen välinen potentiaaliero. Ideaalisella jännitelähteellä nämä ovat samat. Todellisen lähteen napajännite voi kuormitettuna olla lähdejännitettä pienempi lähteen sisäisen resistanssin vuoksi.
@@ -492,18 +537,16 @@ def fmt(value):
     return f"{value:g}" if isinstance(value, (int,float)) else str(value)
 
 
+
 def get_save_path() -> Path:
-    """Palauttaa käyttöjärjestelmälle sopivan käyttäjäkohtaisen tallennuspolun."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-
+        base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local"/"share")))
     save_dir = base / "Sahkoseikkailu"
     save_dir.mkdir(parents=True, exist_ok=True)
-
     return save_dir / "sahkoseikkailu_save.json"
 
 class ElectricityGame:
@@ -513,7 +556,7 @@ class ElectricityGame:
         self.task_number=1
         self.score=0
         self.highest_score=0
-        self.unlocked_through=10
+        self.unlocked_through=5
         self.scored_tasks=set()
         self.bonus_tasks=set()
         self.wrong_attempts=0
@@ -535,8 +578,21 @@ class ElectricityGame:
         self.reset_dialog_visible=False
         self.save_confirmation_visible=False
         self.quit_dialog_visible=False
-        self.save_path = get_save_path()
-        
+        self.unlock_notice_visible=False
+        self.unlock_notice_text=""
+        self.unlock_notice_title="UUSIA TEHTÄVIÄ AVATTU"
+        self.final_exam_visible=False
+        self.final_exam_index=0
+        self.final_exam_selected=set()
+        self.final_exam_points=[]
+        self.final_exam_completed=False
+        self.final_exam_passed=False
+        self.final_exam_score=0.0
+        self.final_exam_questions=[]
+        self.final_exam_ready_notified=False
+        self.victory_animation_start=None
+        self.victory_particles=[]
+        self.save_path=get_save_path()
         self.phase=0.0
         self.electrons=[i/12 for i in range(12)]
         self.branch_flow=0.0
@@ -549,7 +605,7 @@ class ElectricityGame:
         self.challenge=None
         self.task_menu_open=False
         self.task_menu_button=Button(
-            (505,38,175,48), "TEHTÄVÄ 1  ▼", self.toggle_task_menu
+            (655, 18, 175, 32), "TEHTÄVÄ 1  ▼", self.toggle_task_menu
         )
         self.legacy_generator=legacy.ElectricityGame.__new__(legacy.ElectricityGame)
         self.buttons=[
@@ -574,7 +630,8 @@ class ElectricityGame:
         self.reset_button=Button((335,58,145,32),"ALOITA ALUSTA",self.open_reset_dialog)
         self.close_information_button=Button((520,650,200,42),"SULJE",self.close_information)
         self.close_progress_button=Button((520,625,200,42),"SULJE",self.close_progress)
-        self.presentation_button=Button((695,38,145,48),"ESITTELYTILA",self.toggle_presentation)
+        self.presentation_button=Button((495,18,145,32),"ESITTELYTILA",self.toggle_presentation)
+        self.final_exam_button=Button((495,58,145,32),"LOPPUKOE",self.open_final_exam)
         self.activate_presentation_button=Button((410,475,200,46),"AKTIVOI",self.activate_presentation)
         self.cancel_presentation_button=Button((630,475,200,46),"PERUUTA",self.close_presentation_dialog)
         self.confirm_reset_button=Button((410,475,200,46),"ALOITA ALUSTA",self.reset_game)
@@ -582,6 +639,10 @@ class ElectricityGame:
         self.close_save_confirmation_button=Button((520,465,200,46),"OK",self.close_save_confirmation)
         self.quit_save_button=Button((410,475,200,46),"KYLLÄ",self.confirm_quit_save)
         self.quit_without_save_button=Button((630,475,200,46),"EI",self.confirm_quit_without_save)
+        self.close_unlock_notice_button=Button((520,510,200,46),"OK",self.close_unlock_notice)
+        self.final_exam_submit_button=Button((410,620,200,46),"VASTAA",self.submit_final_exam_answer)
+        self.final_exam_restart_button=Button((410,620,200,46),"YRITÄ UUDELLEEN",self.restart_final_exam)
+        self.final_exam_close_button=Button((630,620,200,46),"SULJE",self.close_final_exam)
         self.concept_button=Button((1025,135,130,32),"LISÄTIETOA",self.open_concept_information)
         if "--self-test" in os.sys.argv:
             self.load_task(1)
@@ -607,15 +668,259 @@ class ElectricityGame:
     def refresh_unlocks(self):
         """Päivittää avatun tehtäväryhmän parhaiden saavutettujen pisteiden perusteella."""
         previous=self.unlocked_through
-        if self.highest_score>=200:
+        if self.highest_score>=220:
             self.unlocked_through=30
-        elif self.highest_score>=150:
+        elif self.highest_score>=170:
             self.unlocked_through=26
-        elif self.highest_score>=80:
+        elif self.highest_score>=130:
             self.unlocked_through=20
-        else:
+        elif self.highest_score>=90:
+            self.unlocked_through=15
+        elif self.highest_score>=40:
             self.unlocked_through=10
+        else:
+            self.unlocked_through=5
         return self.unlocked_through if self.unlocked_through>previous else None
+
+    def unlock_message(self, unlocked_through):
+        messages={
+            10:"Tehtävät 6–10 ovat nyt auki.",
+            15:"Tehtävät 11–15 ovat nyt auki.",
+            20:"Tehtävät 16–20 ovat nyt auki.",
+            26:"Tehtävät 21–26 ovat nyt auki.",
+            30:"Jokeritehtävät 27–30 ovat nyt auki.",
+        }
+        return messages.get(unlocked_through,"")
+
+    def show_unlock_notice(self, unlocked_through):
+        message=self.unlock_message(unlocked_through)
+        if message:
+            self.unlock_notice_title="UUSIA TEHTÄVIÄ AVATTU"
+            self.unlock_notice_text=message
+            self.unlock_notice_visible=True
+
+    def close_unlock_notice(self):
+        self.unlock_notice_visible=False
+
+    def task_reward(self, number):
+        return 20 if 27<=number<=30 else 10
+
+    def next_unlock_target(self):
+        """Palauttaa seuraavan vielä avaamattoman tehtäväryhmän pisterajan."""
+        targets=((5,40),(10,90),(15,130),(20,170),(26,220))
+        for unlocked_through,target in targets:
+            if self.unlocked_through<=unlocked_through:
+                return target
+        return None
+
+    def available_points_before_next_unlock(self):
+        """Laskee avoinna olevista ratkaisemattomista tehtävistä vielä saatavat pisteet."""
+        total=0
+        for number in range(1,self.unlocked_through+1):
+            if number in self.scored_tasks:
+                continue
+            remaining=self.task_reward(number)
+            if number in self.bonus_tasks:
+                remaining-=5
+            total+=remaining
+        return total
+
+    def assistance_purchase_allowed(self, cost):
+        """Estää avun ostamisen, jos seuraava avautumisraja muuttuisi mahdottomaksi."""
+        if self.score<cost:
+            return False,"insufficient"
+        target=self.next_unlock_target()
+        if target is None:
+            return True,None
+        future_points=self.available_points_before_next_unlock()
+        if self.score-cost+future_points<target:
+            return False,"reserved"
+        return True,None
+
+    def required_score_for_assistance(self, cost):
+        """Pienin nykyinen pistemäärä, jolla apu voidaan ostaa turvallisesti."""
+        target=self.next_unlock_target()
+        if target is None:
+            return cost
+        future_points=self.available_points_before_next_unlock()
+        return max(cost,target-future_points+cost)
+
+    def assistance_block_message(self, cost, kind):
+        allowed, _reason = self.assistance_purchase_allowed(cost)
+
+        if allowed:
+            return None
+
+        required_score = self.required_score_for_assistance(cost)
+        missing_points = max(1, required_score - self.score)
+
+        return (
+            f"Tarvitset vielä {missing_points} pistettä "
+            f"avataksesi {kind}."
+        )
+    
+    def all_tasks_completed(self):
+        return len(self.scored_tasks)>=30
+
+    def final_exam_available(self):
+        return self.presentation_mode or self.all_tasks_completed()
+
+    def announce_final_exam_ready(self):
+        if self.presentation_mode or self.final_exam_ready_notified:
+            return
+        self.final_exam_ready_notified=True
+        self.unlock_notice_title="LOPPUKOE ON VALMIS"
+        self.unlock_notice_text=("Kaikki 30 tehtävää on ratkaistu. Loppukoe on nyt "
+                                 "avattavissa yläreunan LOPPUKOE-painikkeesta.")
+        self.unlock_notice_visible=True
+
+    def prepare_final_exam_questions(self):
+        questions=[]
+        for question,choices,correct in FINAL_EXAM_QUESTIONS:
+            order=list(range(4))
+            random.shuffle(order)
+            shuffled_choices=tuple(choices[index] for index in order)
+            shuffled_correct={new_index for new_index,old_index in enumerate(order)
+                              if old_index in correct}
+            questions.append((question,shuffled_choices,shuffled_correct))
+        random.shuffle(questions)
+        return questions
+
+    def open_final_exam(self):
+        if not self.final_exam_available():
+            self.feedback="Loppukoe avautuu, kun kaikki 30 tehtävää on ratkaistu."
+            self.feedback_color=RED
+            return
+        self.start_final_exam()
+
+    def start_final_exam(self):
+        self.final_exam_visible=True
+        self.final_exam_index=0
+        self.final_exam_selected=set()
+        self.final_exam_points=[]
+        self.final_exam_completed=False
+        self.final_exam_passed=False
+        self.final_exam_score=0.0
+        self.victory_animation_start=None
+        self.victory_particles=[]
+        self.final_exam_questions=self.prepare_final_exam_questions()
+
+    def close_final_exam(self):
+        self.final_exam_visible=False
+
+    def restart_final_exam(self):
+        self.start_final_exam()
+
+    def score_final_exam_question(self, selected, correct):
+        selected=set(selected)
+        correct=set(correct)
+        if len(correct)==1:
+            if not selected:
+                return 0.0
+            return 1.0 if selected==correct else -0.5
+        points=0.0
+        for index in range(4):
+            handled_correctly=(index in selected)==(index in correct)
+            points+=0.25 if handled_correctly else -0.25
+        return points
+
+    def submit_final_exam_answer(self):
+        if self.final_exam_completed:
+            return
+        _question,_choices,correct=self.final_exam_questions[self.final_exam_index]
+        points=self.score_final_exam_question(self.final_exam_selected,correct)
+        self.final_exam_points.append(points)
+        self.final_exam_index+=1
+        self.final_exam_selected=set()
+        if self.final_exam_index>=len(self.final_exam_questions):
+            self.final_exam_score=max(0.0,round(sum(self.final_exam_points),2))
+            self.final_exam_completed=True
+            self.final_exam_passed=self.final_exam_score>=8.0
+            if self.final_exam_passed:
+                self.start_victory_animation()
+            self.save_game(show_confirmation=False)
+
+    def start_victory_animation(self):
+        """Käynnistää sähköteemaisen juhla-animaation loppukokeen läpäisystä."""
+        self.victory_animation_start=pygame.time.get_ticks()
+        self.victory_particles=[]
+        colors=(CYAN,YELLOW,GREEN,WHITE)
+        center_x,center_y=WIDTH/2,HEIGHT/2
+
+        for _ in range(115):
+            angle=random.uniform(0,math.tau)
+            speed=random.uniform(110,430)
+            self.victory_particles.append({
+                "x":center_x+random.uniform(-25,25),
+                "y":center_y+random.uniform(-20,20),
+                "vx":math.cos(angle)*speed,
+                "vy":math.sin(angle)*speed-random.uniform(20,130),
+                "size":random.randint(2,6),
+                "color":random.choice(colors),
+                "born":random.uniform(0.0,0.7),
+                "life":random.uniform(1.3,2.5),
+            })
+
+    def draw_victory_animation(self):
+        """Piirtää animaation muun näkymän päälle jäädyttämättä tapahtumasilmukkaa."""
+        if self.victory_animation_start is None:
+            return
+
+        elapsed=(pygame.time.get_ticks()-self.victory_animation_start)/1000
+        duration=3.4
+        if elapsed>=duration:
+            self.victory_animation_start=None
+            self.victory_particles=[]
+            return
+
+        overlay=pygame.Surface((WIDTH,HEIGHT),pygame.SRCALPHA)
+        fade_in=min(1.0,elapsed/0.35)
+        fade_out=min(1.0,(duration-elapsed)/0.55)
+        visibility=max(0.0,min(fade_in,fade_out))
+        overlay.fill((2,9,20,int(185*visibility)))
+
+        center=(WIDTH//2,HEIGHT//2)
+        for delay in (0.0,0.22,0.44):
+            ring_time=elapsed-delay
+            if 0<ring_time<1.45:
+                progress=ring_time/1.45
+                radius=int(35+progress*360)
+                alpha=int(210*(1-progress)*visibility)
+                color=pygame.Color(CYAN if delay!=0.22 else YELLOW)
+                color.a=max(0,alpha)
+                pygame.draw.circle(overlay,color,center,radius,max(2,int(7*(1-progress))))
+
+        gravity=230
+        for particle in self.victory_particles:
+            age=elapsed-particle["born"]
+            if age<0 or age>particle["life"]:
+                continue
+            life_progress=age/particle["life"]
+            x=particle["x"]+particle["vx"]*age
+            y=particle["y"]+particle["vy"]*age+0.5*gravity*age*age
+            alpha=int(255*(1-life_progress)*visibility)
+            color=pygame.Color(particle["color"])
+            color.a=max(0,alpha)
+            size=max(1,int(particle["size"]*(1-0.45*life_progress)))
+            pygame.draw.circle(overlay,color,(round(x),round(y)),size)
+
+        pulse=1.0+0.045*math.sin(elapsed*9)
+        title_size=max(30,int(48*pulse))
+        title_image=font(title_size,True).render("PELI LÄPÄISTY",True,GREEN)
+        title_image.set_alpha(int(255*visibility))
+        title_rect=title_image.get_rect(center=(center[0],center[1]-32))
+        overlay.blit(title_image,title_rect)
+
+        result_image=font(24,True).render(
+            f"Loppukoe {self.final_exam_score:g}/10",
+            True,
+            WHITE,
+        )
+        result_image.set_alpha(int(255*visibility))
+        result_rect=result_image.get_rect(center=(center[0],center[1]+35))
+        overlay.blit(result_image,result_rect)
+
+        self.screen.blit(overlay,(0,0))
 
     def load_task(self, number, ignore_unlock=False):
         self.auto_advance_at=None
@@ -701,13 +1006,15 @@ class ElectricityGame:
         else:
             newly_unlocked=None
         if earned_points:
-            self.bonus_result=("Oikein! +5 pistettä. Tämän tehtävän varsinaisesta "
-                               "ratkaisusta saa vielä 5 pistettä.")
+            remaining=self.task_reward(self.task_number)-5
+            self.bonus_result=(f"Oikein! +5 pistettä. Tämän tehtävän varsinaisesta "
+                               f"ratkaisusta saa vielä {remaining} pistettä.")
         else:
             self.bonus_result=("Oikein! Varsinainen tehtävä oli jo ratkaistu, "
                                "joten lisätehtävästä ei enää saa pisteitä.")
         if newly_unlocked:
-            self.bonus_result+=f" Tehtävät avautuivat numeroon {newly_unlocked} asti."
+            self.show_unlock_notice(newly_unlocked)
+            self.bonus_result+=" "+self.unlock_message(newly_unlocked)
         self.bonus_result_color=GREEN
         self.check_bonus_button.enabled=False
         self.update_bonus_button()
@@ -732,8 +1039,9 @@ class ElectricityGame:
         return items
 
     def open_hint(self):
-        if self.score < 5:
-            self.feedback="Vihje maksaa 5 pistettä. Kerää ensin lisää pisteitä."
+        message=self.assistance_block_message(5,"vihjeen")
+        if message:
+            self.feedback=message
             self.feedback_color=RED
             return
         self.score-=5
@@ -743,8 +1051,9 @@ class ElectricityGame:
         self.hint_visible=False
 
     def open_answer(self):
-        if self.score < 10:
-            self.feedback="Vastaus maksaa 10 pistettä. Kerää ensin lisää pisteitä."
+        message=self.assistance_block_message(10,"oikean vastauksen")
+        if message:
+            self.feedback=message
             self.feedback_color=RED
             return
         self.score-=10
@@ -822,6 +1131,10 @@ class ElectricityGame:
             "scored_tasks":sorted(self.scored_tasks),
             "bonus_tasks":sorted(self.bonus_tasks),
             "task_number":self.task_number,
+            "final_exam_completed":self.final_exam_completed,
+            "final_exam_passed":self.final_exam_passed,
+            "final_exam_score":self.final_exam_score,
+            "final_exam_ready_notified":self.final_exam_ready_notified,
         }
         try:
             temporary_path=self.save_path.with_suffix(".tmp")
@@ -865,19 +1178,25 @@ class ElectricityGame:
             data=json.loads(self.save_path.read_text(encoding="utf-8"))
             self.score=max(0,int(data.get("score",0)))
             self.highest_score=max(self.score,int(data.get("highest_score",self.score)))
-            saved_unlock=int(data.get("unlocked_through",10))
-            self.unlocked_through=max(10,min(30,saved_unlock))
+            saved_unlock=int(data.get("unlocked_through",5))
+            self.unlocked_through=max(5,min(30,saved_unlock))
             self.refresh_unlocks()
             self.scored_tasks={int(n) for n in data.get("scored_tasks",[]) if 1<=int(n)<=30}
             self.bonus_tasks={int(n) for n in data.get("bonus_tasks",[]) if 1<=int(n)<=30}
+            self.final_exam_completed=bool(data.get("final_exam_completed",False))
+            self.final_exam_passed=bool(data.get("final_exam_passed",False))
+            self.final_exam_score=float(data.get("final_exam_score",0.0))
+            self.final_exam_ready_notified=bool(data.get("final_exam_ready_notified",False))
             task_number=int(data.get("task_number",1))
             if not self.task_is_unlocked(task_number):
                 task_number=1
             self.load_task(task_number)
+            if self.all_tasks_completed() and not self.final_exam_passed:
+                self.announce_final_exam_ready()
         except (OSError,ValueError,TypeError,json.JSONDecodeError):
             self.score=0
             self.highest_score=0
-            self.unlocked_through=10
+            self.unlocked_through=5
             self.scored_tasks=set()
             self.bonus_tasks=set()
             self.load_task(1)
@@ -902,9 +1221,16 @@ class ElectricityGame:
         self.reset_dialog_visible=False
         self.score=0
         self.highest_score=0
-        self.unlocked_through=10
+        self.unlocked_through=5
         self.scored_tasks=set()
         self.bonus_tasks=set()
+        self.final_exam_visible=False
+        self.final_exam_completed=False
+        self.final_exam_passed=False
+        self.final_exam_score=0.0
+        self.final_exam_points=[]
+        self.final_exam_questions=[]
+        self.final_exam_ready_notified=False
         self.load_task(1,ignore_unlock=True)
         self.feedback="Peli aloitettiin alusta. Pisteet ja edistyminen nollattiin."
         self.feedback_color=GREEN
@@ -937,6 +1263,10 @@ class ElectricityGame:
             "input_cursor":self.input.cursor_index,
             "feedback":self.feedback,
             "feedback_color":self.feedback_color,
+            "final_exam_completed":self.final_exam_completed,
+            "final_exam_passed":self.final_exam_passed,
+            "final_exam_score":self.final_exam_score,
+            "final_exam_ready_notified":self.final_exam_ready_notified,
         }
         self.presentation_mode=True
         self.presentation_dialog_visible=False
@@ -945,6 +1275,7 @@ class ElectricityGame:
         self.unlocked_through=30
         self.scored_tasks=set()
         self.bonus_tasks=set()
+        self.final_exam_visible=False
         self.presentation_button.label="PELITILA"
         self.update_bonus_button()
         self.feedback="Esittelytila on käytössä: 1000 pistettä ja kaikki tehtävät avoinna."
@@ -967,6 +1298,11 @@ class ElectricityGame:
         self.input.cursor_index=snapshot["input_cursor"]
         self.feedback=snapshot["feedback"]
         self.feedback_color=snapshot["feedback_color"]
+        self.final_exam_completed=snapshot["final_exam_completed"]
+        self.final_exam_passed=snapshot["final_exam_passed"]
+        self.final_exam_score=snapshot["final_exam_score"]
+        self.final_exam_ready_notified=snapshot["final_exam_ready_notified"]
+        self.final_exam_visible=False
         self.presentation_mode=False
         self.presentation_dialog_visible=False
         self.presentation_snapshot=None
@@ -1112,16 +1448,14 @@ class ElectricityGame:
             earned_points=0
             if self.task_number not in self.scored_tasks:
                 self.scored_tasks.add(self.task_number)
-                earned_points=5 if self.task_number in self.bonus_tasks else 10
+                full_reward=self.task_reward(self.task_number)
+                earned_points=full_reward-5 if self.task_number in self.bonus_tasks else full_reward
                 self.score+=earned_points
                 self.highest_score=max(self.highest_score,self.score)
                 newly_unlocked=self.refresh_unlocks()
-                if newly_unlocked==20:
-                    unlocked_message=" Keskivaikeat tehtävät 11–20 avautuivat!"
-                elif newly_unlocked==26:
-                    unlocked_message=" Haastavat tehtävät 21–26 avautuivat!"
-                elif newly_unlocked==30:
-                    unlocked_message=" Jokeritehtävät 27–30 avautuivat!"
+                if newly_unlocked:
+                    self.show_unlock_notice(newly_unlocked)
+                    unlocked_message=" "+self.unlock_message(newly_unlocked)
             self.feedback=(f"Oikein! Tehtävä ratkaistu. +{earned_points} pistettä."
                            if earned_points else "Oikein! Tehtävä oli jo ratkaistu.")
             self.feedback+=unlocked_message
@@ -1129,6 +1463,8 @@ class ElectricityGame:
             self.flash=12
             self.bonus_visible=False
             self.update_bonus_button()
+            if self.all_tasks_completed() and not self.final_exam_passed:
+                self.announce_final_exam_ready()
             next_task=self.task_number+1
             if next_task<=30 and self.task_is_unlocked(next_task):
                 self.auto_advance_from=self.task_number
@@ -1160,6 +1496,10 @@ class ElectricityGame:
                 self.close_reset_dialog()
             elif self.presentation_dialog_visible:
                 self.close_presentation_dialog()
+            elif self.final_exam_visible:
+                self.close_final_exam()
+            elif self.unlock_notice_visible:
+                self.close_unlock_notice()
             elif self.progress_visible:
                 self.close_progress()
             elif self.information_kind:
@@ -1183,6 +1523,32 @@ class ElectricityGame:
 
         if self.save_confirmation_visible:
             self.close_save_confirmation_button.handle_event(event)
+            return
+
+        if self.final_exam_visible:
+            if not self.final_exam_completed and event.type==pygame.MOUSEBUTTONUP and event.button==1:
+                for index,rect in enumerate(self.final_exam_option_rects()):
+                    if rect.collidepoint(event.pos):
+                        _question,_choices,correct=self.final_exam_questions[self.final_exam_index]
+                        if len(correct)==1:
+                            self.final_exam_selected={index}
+                        elif index in self.final_exam_selected:
+                            self.final_exam_selected.remove(index)
+                        else:
+                            self.final_exam_selected.add(index)
+                        return
+            if self.final_exam_completed:
+                if self.final_exam_passed:
+                    self.final_exam_close_button.handle_event(event)
+                else:
+                    self.final_exam_restart_button.handle_event(event)
+                    self.final_exam_close_button.handle_event(event)
+            else:
+                self.final_exam_submit_button.handle_event(event)
+            return
+
+        if self.unlock_notice_visible:
+            self.close_unlock_notice_button.handle_event(event)
             return
 
         if self.reset_dialog_visible:
@@ -1248,6 +1614,8 @@ class ElectricityGame:
         if self.concept_button.handle_event(event):
             return
         if self.presentation_button.handle_event(event):
+            return
+        if self.final_exam_button.handle_event(event):
             return
 
         # Tehtävävalikko käsitellään ennen piirissä olevia muita
@@ -1467,6 +1835,66 @@ class ElectricityGame:
                       (panel.left+55,panel.bottom-52),13,MUTED)
         self.close_information_button.draw(self.screen)
 
+    def final_exam_option_rects(self):
+        return [pygame.Rect(300,285+index*68,640,54) for index in range(4)]
+
+    def draw_unlock_notice(self):
+        if not self.unlock_notice_visible:
+            return
+        overlay=pygame.Surface((WIDTH,HEIGHT),pygame.SRCALPHA)
+        overlay.fill((0,0,0,185)); self.screen.blit(overlay,(0,0))
+        panel=pygame.Rect(300,215,640,350)
+        pygame.draw.rect(self.screen,"#020914",panel.move(7,8),border_radius=12)
+        pygame.draw.rect(self.screen,PANEL,panel,border_radius=12)
+        pygame.draw.rect(self.screen,GREEN,panel,3,border_radius=12)
+        draw_text(self.screen,self.unlock_notice_title,(panel.centerx,panel.top+65),27,GREEN,True,"center")
+        draw_fitted_text(self.screen,self.unlock_notice_text,pygame.Rect(panel.left+75,panel.top+125,panel.width-150,100),25,18,WHITE,True,5)
+        self.close_unlock_notice_button.draw(self.screen)
+
+    def draw_final_exam(self):
+        if not self.final_exam_visible:
+            return
+        if not self.final_exam_questions:
+            self.final_exam_questions=self.prepare_final_exam_questions()
+        overlay=pygame.Surface((WIDTH,HEIGHT),pygame.SRCALPHA)
+        overlay.fill((0,0,0,205)); self.screen.blit(overlay,(0,0))
+        panel=pygame.Rect(180,45,880,680)
+        pygame.draw.rect(self.screen,"#020914",panel.move(7,8),border_radius=12)
+        pygame.draw.rect(self.screen,PANEL,panel,border_radius=12)
+        pygame.draw.rect(self.screen,CYAN,panel,3,border_radius=12)
+        draw_text(self.screen,"LOPPUKOE",(panel.centerx,panel.top+35),28,CYAN,True,"center")
+        if self.final_exam_completed:
+            result_color=GREEN if self.final_exam_passed else RED
+            title="PELI LÄPÄISTY" if self.final_exam_passed else "LOPPUKOE EI MENNYT LÄPI"
+            draw_text(self.screen,title,(panel.centerx,panel.top+120),30,result_color,True,"center")
+            draw_text(self.screen,f"Tulos: {self.final_exam_score:g}/10",(panel.centerx,panel.top+195),28,WHITE,True,"center")
+            message=("Ratkaisit kaikki tehtävät ja sait loppukokeesta vähintään 8 pistettä."
+                     if self.final_exam_passed else
+                     "Läpäisyyn tarvitaan vähintään 8/10 pistettä. Voit yrittää loppukoetta uudelleen.")
+            draw_fitted_text(self.screen,message,pygame.Rect(panel.left+120,panel.top+250,panel.width-240,130),22,16,WHITE,False,6)
+            if not self.final_exam_passed:
+                self.final_exam_restart_button.draw(self.screen)
+            self.final_exam_close_button.draw(self.screen)
+            return
+        question,choices,correct=self.final_exam_questions[self.final_exam_index]
+        draw_text(self.screen,f"Kysymys {self.final_exam_index+1}/10",(panel.centerx,panel.top+80),17,YELLOW,True,"center")
+        instruction=("Valitse yksi vaihtoehto." if len(correct)==1 else "Valitse kaikki oikeat vaihtoehdot.")
+        draw_fitted_text(self.screen,question,pygame.Rect(panel.left+100,panel.top+115,panel.width-200,90),23,16,WHITE,True,5)
+        draw_text(self.screen,instruction,(panel.centerx,panel.top+220),15,MUTED,False,"center")
+        for index,(choice,rect) in enumerate(zip(choices,self.final_exam_option_rects())):
+            selected=index in self.final_exam_selected
+            bg="#1f5a4a" if selected else "#172b44"
+            border=GREEN if selected else PANEL_BORDER
+            pygame.draw.rect(self.screen,bg,rect,border_radius=7)
+            pygame.draw.rect(self.screen,border,rect,3,border_radius=7)
+            box=pygame.Rect(rect.left+14,rect.centery-11,22,22)
+            pygame.draw.rect(self.screen,"#081421",box,border_radius=3)
+            pygame.draw.rect(self.screen,border,box,2,border_radius=3)
+            if selected:
+                draw_text(self.screen,"✓",box.center,18,GREEN,True,"center")
+            draw_fitted_text(self.screen,choice,pygame.Rect(rect.left+50,rect.top+7,rect.width-62,rect.height-14),17,12,WHITE,False,2)
+        self.final_exam_submit_button.draw(self.screen)
+
     def draw_progress_window(self):
         if not self.progress_visible:
             return
@@ -1481,6 +1909,12 @@ class ElectricityGame:
         completed=sum(number in self.scored_tasks for number in range(1,31))
         draw_text(self.screen,f"Ratkaistu {completed}/30 tehtävää",
                   (panel.centerx,panel.top+70),17,WHITE,True,"center")
+        if self.final_exam_passed:
+            draw_text(self.screen,f"Loppukoe läpäisty: {self.final_exam_score:g}/10",
+                      (panel.centerx,panel.top+98),15,GREEN,True,"center")
+        elif self.final_exam_completed:
+            draw_text(self.screen,f"Loppukoe: {self.final_exam_score:g}/10",
+                      (panel.centerx,panel.top+98),15,YELLOW,True,"center")
 
         colors={"TEHTY":GREEN,"TEKEMÄTTÄ":YELLOW,"LUKITTU":"#69788b"}
         left,top=270,180
@@ -1589,13 +2023,22 @@ class ElectricityGame:
         self.progress_button.draw(self.screen)
         self.save_button.draw(self.screen)
         self.reset_button.draw(self.screen)
-        draw_text(self.screen,f"PISTEET {self.score}  •  TEHTÄVÄ {self.task_number}",(1190,45),24,YELLOW,True,"topright")
+        draw_text(self.screen,f"PISTEET {self.score} ",(1180,45),24,YELLOW,True,"topright")
         self.task_menu_button.draw(self.screen)
         self.presentation_button.draw(self.screen)
+        self.final_exam_button.enabled=self.final_exam_available()
+        self.final_exam_button.draw(self.screen)
         for panel in (pygame.Rect(35,105,745,590),pygame.Rect(800,105,390,590)):
             pygame.draw.rect(self.screen,PANEL,panel); pygame.draw.rect(self.screen,PANEL_BORDER,panel,3)
         self.draw_circuit(pygame.Rect(52,125,710,540))
-        draw_text(self.screen,"TEHTÄVÄ",(830,140),22,CYAN,True)
+        draw_text(
+            self.screen,
+            f"TEHTÄVÄ {self.task_number}",
+            (830,140),
+            22,
+            YELLOW,
+            True
+        )
         self.concept_button.draw(self.screen)
         draw_fitted_text(self.screen,self.prompt(),pygame.Rect(830,190,325,205),18,10,WHITE,True,2)
         self.input.draw(self.screen)
@@ -1611,6 +2054,8 @@ class ElectricityGame:
         self.draw_answer_window()
         self.draw_information_window()
         self.draw_progress_window()
+        self.draw_unlock_notice()
+        self.draw_final_exam()
         self.draw_presentation_dialog()
         self.draw_reset_dialog()
         self.draw_save_confirmation()
@@ -1628,6 +2073,8 @@ class ElectricityGame:
             color.a=72
             overlay.fill(color)
             self.screen.blit(overlay,(0,0))
+
+        self.draw_victory_animation()
         pygame.display.flip()
 
 
@@ -1720,15 +2167,16 @@ def run_self_test():
     game.open_answer()
     assert game.score==0 and not game.answer_visible
     game.highest_score=0
-    game.unlocked_through=10
+    game.unlocked_through=5
     game.load_task(1)
     assert not game.load_task(11) and game.task_number==1
-    game.highest_score=80; assert game.refresh_unlocks()==20
-    assert game.load_task(20)
+    game.highest_score=40; assert game.refresh_unlocks()==10
+    assert game.load_task(10)
+    game.highest_score=90; assert game.refresh_unlocks()==15
     game.score=0; game.refresh_unlocks()
-    assert game.unlocked_through==20
-    game.highest_score=150; assert game.refresh_unlocks()==26
-    game.highest_score=200; assert game.refresh_unlocks()==30
+    assert game.unlocked_through==15
+    game.highest_score=170; assert game.refresh_unlocks()==26
+    game.highest_score=220; assert game.refresh_unlocks()==30
     assert game.load_task(30)
     game.score=0
     game.highest_score=0
@@ -1758,7 +2206,7 @@ def run_self_test():
     assert not game.bonus_button.enabled
     game.bonus_tasks=set()
     game.score=42
-    game.highest_score=80
+    game.highest_score=90
     game.unlocked_through=20
     game.scored_tasks={1,2,3}
     game.load_task(5)
@@ -1775,14 +2223,14 @@ def run_self_test():
     game.scored_tasks.add(30)
     game.deactivate_presentation()
     assert not game.presentation_mode and game.score==42
-    assert game.highest_score==80 and game.unlocked_through==20
+    assert game.highest_score==90 and game.unlocked_through==15
     assert game.scored_tasks=={1,2,3} and game.task_number==5
     assert game.challenge is saved_challenge
     assert game.presentation_button.label=="ESITTELYTILA"
     assert game.task_menu_button.label=="TEHTÄVÄ 5  ▼"
     game.score=0
     game.highest_score=0
-    game.unlocked_through=10
+    game.unlocked_through=5
     game.scored_tasks=set()
     game.bonus_tasks=set()
     game.load_task(3)
@@ -1793,12 +2241,9 @@ def run_self_test():
     game.update(0)
     assert game.task_number==4
     assert game.task_menu_button.label=="TEHTÄVÄ 4  ▼"
-    game.save_path = (
-        Path(tempfile.gettempdir())
-        / f"sahkoseikkailu-self-test-{os.getpid()}.json"
-    )
+    game.save_path=Path("/tmp")/f"sahkoseikkailu-self-test-{os.getpid()}.json"
     game.score=23
-    game.highest_score=80
+    game.highest_score=90
     game.unlocked_through=20
     game.scored_tasks={1,4}
     game.bonus_tasks={2}
@@ -1806,16 +2251,16 @@ def run_self_test():
     assert game.save_game() and game.save_path.exists()
     assert game.save_confirmation_visible
     game.close_save_confirmation()
-    game.score=0; game.highest_score=0; game.unlocked_through=10
+    game.score=0; game.highest_score=0; game.unlocked_through=5
     game.scored_tasks=set(); game.bonus_tasks=set(); game.load_task(1)
     assert game.load_saved_game()
-    assert game.score==23 and game.highest_score==80 and game.unlocked_through==20
+    assert game.score==23 and game.highest_score==90 and game.unlocked_through==20
     assert game.scored_tasks=={1,4} and game.bonus_tasks=={2} and game.task_number==12
     game.reset_game()
-    assert game.score==0 and game.highest_score==0 and game.unlocked_through==10
+    assert game.score==0 and game.highest_score==0 and game.unlocked_through==5
     assert not game.scored_tasks and not game.bonus_tasks and game.task_number==1
     saved_reset=json.loads(game.save_path.read_text(encoding="utf-8"))
-    assert saved_reset["score"]==0 and saved_reset["unlocked_through"]==10
+    assert saved_reset["score"]==0 and saved_reset["unlocked_through"]==5
     saved_before_no=game.save_path.read_text(encoding="utf-8")
     game.score=99
     game.quit_dialog_visible=True
@@ -1833,7 +2278,12 @@ def run_self_test():
     assert not game.running and not game.presentation_mode
     assert saved_on_quit["score"]==7
     game.save_path.unlink(missing_ok=True)
-    pygame.quit(); print("SELF-TEST OK: kaikki 30 tehtävää arvottiin, laskettiin ja piirrettiin")
+    assert game.score_final_exam_question({0},{0})==1.0
+    assert game.score_final_exam_question(set(),{0})==0.0
+    assert game.score_final_exam_question({1},{0})==-0.5
+    assert game.score_final_exam_question({0,1},{0,1})==1.0
+    assert game.score_final_exam_question(set(),{0,1})==0.0
+    pygame.quit(); print("SELF-TEST OK: kaikki 30 tehtävää ja loppukoe tarkistettiin")
 
 
 def main():
